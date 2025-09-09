@@ -56,11 +56,15 @@ import 'package:flutter/material.dart';
 /// ```
 class RefreshLocalizations {
   RefreshLocalizations(this.locale);
+
   final Locale locale;
 
-  Map<String, RefreshString> values = {
+  Map<String, dynamic> values = {
     'en': EnRefreshString(),
-    'zh': ChRefreshString(),
+    'zh': {
+      'CN': ZhCnRefreshString(),
+      'TW': ZhTwRefreshString(),
+    },
     'fr': FrRefreshString(),
     'ru': RuRefreshString(),
     'uk': UkRefreshString(),
@@ -76,7 +80,13 @@ class RefreshLocalizations {
 
   RefreshString? get currentLocalization {
     if (values.containsKey(locale.languageCode)) {
-      return values[locale.languageCode];
+      if (values[locale.languageCode] is RefreshString) {
+        return values[locale.languageCode];
+      } else if (values[locale.languageCode].containsKey(locale.countryCode)) {
+        return values[locale.languageCode][locale.countryCode];
+      } else {
+        return values[locale.languageCode].values.firstOrNull;
+      }
     }
     return values['en'];
   }
@@ -160,16 +170,16 @@ abstract class RefreshString {
   String? noMoreText;
 }
 
-/// Chinese
-class ChRefreshString implements RefreshString {
+/// Simplified Chinese
+class ZhCnRefreshString implements RefreshString {
   @override
   String? canLoadingText = '松手开始加载数据';
 
   @override
-  String? canRefreshText = '松开开始刷新数据';
+  String? canRefreshText = '松手开始刷新数据';
 
   @override
-  String? canTwoLevelText = '释放手势,进入二楼';
+  String? canTwoLevelText = '释放手势,进入二层';
 
   @override
   String? idleLoadingText = '上拉加载';
@@ -191,6 +201,42 @@ class ChRefreshString implements RefreshString {
 
   @override
   String? refreshFailedText = '刷新失败';
+
+  @override
+  String? refreshingText = '刷新中…';
+}
+
+/// Traditional Chinese
+class ZhTwRefreshString implements RefreshString {
+  @override
+  String? canLoadingText = '鬆手手開始加載數據';
+
+  @override
+  String? canRefreshText = '鬆手開始刷新數據';
+
+  @override
+  String? canTwoLevelText = '釋放手勢,進入二層';
+
+  @override
+  String? idleLoadingText = '上拉加載';
+
+  @override
+  String? idleRefreshText = '下拉刷新';
+
+  @override
+  String? loadFailedText = '加載失敗';
+
+  @override
+  String? loadingText = '加載中…';
+
+  @override
+  String? noMoreText = '沒有更多數據了';
+
+  @override
+  String? refreshCompleteText = '刷新成功';
+
+  @override
+  String? refreshFailedText = '刷新失敗';
 
   @override
   String? refreshingText = '刷新中…';
