@@ -40,11 +40,10 @@ abstract class RefreshIndicator extends StatefulWidget {
 /// a widget  implements  pull up load
 abstract class LoadIndicator extends StatefulWidget {
   const LoadIndicator(
-      {Key? key,
+      {super.key,
       this.onClick,
       this.loadStyle = LoadStyle.ShowAlways,
-      this.height = 60.0})
-      : super(key: key);
+      this.height = 60.0});
 
   /// load more display style
   final LoadStyle loadStyle;

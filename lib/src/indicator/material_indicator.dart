@@ -27,19 +27,16 @@ class MaterialClassicHeader extends RefreshIndicator {
   final Color? backgroundColor;
 
   const MaterialClassicHeader({
-    Key? key,
-    double height = 80.0,
+    super.key,
+    super.height = 80.0,
     this.semanticsLabel,
     this.semanticsValue,
     this.color,
-    double offset = 0,
+    super.offset,
     this.distance = 50.0,
     this.backgroundColor,
   }) : super(
-          key: key,
           refreshStyle: RefreshStyle.Front,
-          offset: offset,
-          height: height,
         );
 
   @override
@@ -148,8 +145,8 @@ class _MaterialClassicHeaderState
     _position = Scrollable.of(context).position;
     _valueColor = _positionController.drive(
       ColorTween(
-        begin: (widget.color ?? theme.primaryColor).withOpacity(0.0),
-        end: (widget.color ?? theme.primaryColor).withOpacity(1.0),
+        begin: (widget.color ?? theme.primaryColor).withValues(alpha: 0.0),
+        end: (widget.color ?? theme.primaryColor).withValues(alpha: 1.0),
       ).chain(
           CurveTween(curve: const Interval(0.0, 1.0 / _kDragSizeFactorLimit))),
     );
@@ -221,8 +218,8 @@ class _WaterDropMaterialHeaderState extends _MaterialClassicHeaderState {
     final ThemeData theme = Theme.of(context);
     _valueColor = _positionController.drive(
       ColorTween(
-        begin: (widget.color ?? theme.primaryColor).withOpacity(0.0),
-        end: (widget.color ?? theme.primaryColor).withOpacity(1.0),
+        begin: (widget.color ?? theme.primaryColor).withValues(alpha: 0.0),
+        end: (widget.color ?? theme.primaryColor).withValues(alpha: 1.0),
       ).chain(
           CurveTween(curve: const Interval(0.0, 1.0 / _kDragSizeFactorLimit))),
     );

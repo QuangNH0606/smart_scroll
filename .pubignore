@@ -1,0 +1,15 @@
+# FVM files
+.fvm/
+.fvmrc
+
+# IDE files
+.vscode/
+*.iml
+
+# Build files
+build/
+.dart_tool/
+
+# OS files
+.DS_Store
+Thumbs.db

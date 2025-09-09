@@ -79,7 +79,7 @@ class TwoLevelHeader extends StatelessWidget {
   final Duration completeDuration;
 
   const TwoLevelHeader(
-      {Key? key,
+      {super.key,
       this.height = 80.0,
       this.decoration,
       this.displayAlignment = TwoLevelDisplayAlignment.fromBottom,

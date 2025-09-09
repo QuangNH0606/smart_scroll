@@ -304,14 +304,14 @@ class RenderSliverRefresh extends RenderSliverSingleBoxAdapter {
 /// Render footer sliver widget
 class SliverLoading extends SingleChildRenderObjectWidget {
   const SliverLoading({
-    Key? key,
+    super.key,
     this.mode,
     this.floating,
     this.shouldFollowContent,
     this.layoutExtent,
     this.hideWhenNotFull,
-    Widget? child,
-  }) : super(key: key, child: child);
+    super.child,
+  });
 
   /// when not full one page,whether it should be hide and disable loading
   final bool? hideWhenNotFull;
@@ -511,9 +511,9 @@ class RenderSliverLoading extends RenderSliverSingleBoxAdapter {
 class SliverRefreshBody extends SingleChildRenderObjectWidget {
   /// Creates a sliver that contains a single box widget.
   const SliverRefreshBody({
-    Key? key,
-    Widget? child,
-  }) : super(key: key, child: child);
+    super.key,
+    super.child,
+  });
 
   @override
   RenderSliverRefreshBody createRenderObject(BuildContext context) =>

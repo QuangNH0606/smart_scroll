@@ -1,3 +1,5 @@
+// ignore_for_file: constant_identifier_names
+
 import 'dart:math' as math;
 
 import 'package:flutter/material.dart'
@@ -87,7 +89,7 @@ class _BezierHeaderState extends RefreshIndicatorState<BezierHeader>
   @override
   Future<void> readyToRefresh() {
     final Simulation simulation = SpringSimulation(
-        SpringDescription(
+        const SpringDescription(
           mass: 3.4,
           stiffness: 10000.5,
           damping: 6,
@@ -108,7 +110,7 @@ class _BezierHeaderState extends RefreshIndicatorState<BezierHeader>
       await widget.endRefresh!();
     }
     return _bezierDismissCtl.animateTo(1.0,
-        duration: Duration(milliseconds: 200));
+        duration: const Duration(milliseconds: 200));
   }
 
   @override
@@ -211,8 +213,8 @@ class _BezierDismissPainter extends CustomClipper<Path> {
       path2.lineTo(halfWidth + value! * halfWidth, size.height);
       path2.lineTo(size.width, size.height);
       path2.lineTo(size.width, 0);
-      path.addPath(path1, Offset(0, 0));
-      path.addPath(path2, Offset(0, 0));
+      path.addPath(path1, const Offset(0, 0));
+      path.addPath(path2, const Offset(0, 0));
     } else {
       final double maxExtent =
           math.max(size.width, size.height) * (1.0 - value!);
@@ -309,12 +311,12 @@ class _BezierCircleHeaderState extends State<BezierCircleHeader>
   void initState() {
     _dismissCtrl = AnimationController(vsync: this);
     _childMoveCtl = AnimationController(vsync: this);
-    _radialCtrl =
-        AnimationController(vsync: this, duration: Duration(milliseconds: 500));
+    _radialCtrl = AnimationController(
+        vsync: this, duration: const Duration(milliseconds: 500));
     _childMoveTween = AlignmentGeometryTween(
         begin: Alignment.bottomCenter, end: Alignment.center);
-    _disMissTween =
-        Tween<Offset>(begin: Offset(0.0, 0.0), end: Offset(0.0, 1.5));
+    _disMissTween = Tween<Offset>(
+        begin: const Offset(0.0, 0.0), end: const Offset(0.0, 1.5));
     super.initState();
   }
 
@@ -335,7 +337,7 @@ class _BezierCircleHeaderState extends State<BezierCircleHeader>
       enableChildOverflow: widget.enableChildOverflow,
       readyRefresh: () async {
         await _childMoveCtl.animateTo(1.0,
-            duration: Duration(milliseconds: 300));
+            duration: const Duration(milliseconds: 300));
       },
       onResetValue: () {
         _dismissCtrl.value = 0;
@@ -344,13 +346,14 @@ class _BezierCircleHeaderState extends State<BezierCircleHeader>
       onModeChange: (m) {
         mode = m;
         if (m == RefreshStatus.refreshing) {
-          _radialCtrl.repeat(period: Duration(milliseconds: 500));
+          _radialCtrl.repeat(period: const Duration(milliseconds: 500));
         }
         setState(() {});
       },
       endRefresh: () async {
         _radialCtrl.reset();
-        await _dismissCtrl.animateTo(1, duration: Duration(milliseconds: 550));
+        await _dismissCtrl.animateTo(1,
+            duration: const Duration(milliseconds: 550));
       },
       child: SlideTransition(
         position: _disMissTween.animate(_dismissCtrl),
@@ -377,7 +380,8 @@ class _BezierCircleHeaderState extends State<BezierCircleHeader>
                           child: CircularProgressIndicator(
                             valueColor: mode == RefreshStatus.refreshing
                                 ? AlwaysStoppedAnimation(widget.circleColor)
-                                : AlwaysStoppedAnimation(Colors.transparent),
+                                : const AlwaysStoppedAnimation(
+                                    Colors.transparent),
                             strokeWidth: 2,
                           ),
                         ),
@@ -443,7 +447,7 @@ class _RaiDalPainter extends CustomPainter {
         math.pi * 4,
         true,
         paint);
-    paint.color = Color.fromRGBO(233, 233, 233, 0.8);
+    paint.color = const Color.fromRGBO(233, 233, 233, 0.8);
     canvas.drawArc(
         Rect.fromCircle(
             center: Offset(size.width / 2, size.height / 2),

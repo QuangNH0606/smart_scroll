@@ -953,6 +953,8 @@ class RefreshConfiguration extends InheritedWidget {
         shouldFooterFollowWhenNotFull = shouldFooterFollowWhenNotFull ??
             RefreshConfiguration.of(context)!.shouldFooterFollowWhenNotFull,
         super(child: child);
+  @override
+  // ignore: overridden_fields
   final Widget child;
 
   /// global default header builder

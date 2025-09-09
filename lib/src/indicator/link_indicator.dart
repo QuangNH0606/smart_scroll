@@ -58,11 +58,7 @@ class _LinkHeaderState extends RefreshIndicatorState<LinkHeader> {
 
 class LinkFooter extends LoadIndicator {
   const LinkFooter(
-      {Key? key,
-      required this.linkKey,
-      double height = 0.0,
-      LoadStyle loadStyle = LoadStyle.ShowAlways})
-      : super(height: height, loadStyle: loadStyle, key: key);
+      {super.key, required this.linkKey, super.height = 0.0, super.loadStyle});
   final Key linkKey;
 
   @override

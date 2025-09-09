@@ -44,21 +44,17 @@ typedef FooterBuilder = Widget Function(BuildContext context, LoadStatus? mode);
 /// [CustomFooter], a custom Indicator for footer
 class CustomHeader extends RefreshIndicator {
   const CustomHeader({
-    Key? key,
+    super.key,
     required this.builder,
     this.readyToRefresh,
     this.endRefresh,
     this.onOffsetChange,
     this.onModeChange,
     this.onResetValue,
-    double height = 60.0,
-    Duration completeDuration = const Duration(milliseconds: 600),
-    RefreshStyle refreshStyle = RefreshStyle.Follow,
-  }) : super(
-            key: key,
-            completeDuration: completeDuration,
-            refreshStyle: refreshStyle,
-            height: height);
+    super.height,
+    super.completeDuration = const Duration(milliseconds: 600),
+    RefreshStyle super.refreshStyle,
+  });
   final HeaderBuilder builder;
 
   final VoidFutureCallBack? readyToRefresh;
@@ -122,20 +118,16 @@ class _CustomHeaderState extends RefreshIndicatorState<CustomHeader> {
 /// [CustomHeader], a custom Indicator for header
 class CustomFooter extends LoadIndicator {
   const CustomFooter({
-    Key? key,
-    double height = 60.0,
+    super.key,
+    super.height,
     this.onModeChange,
     this.onOffsetChange,
     this.readyLoading,
     this.endLoading,
-    LoadStyle loadStyle = LoadStyle.ShowAlways,
+    super.loadStyle,
     required this.builder,
     Function? onClick,
-  }) : super(
-            key: key,
-            onClick: onClick as void Function()?,
-            loadStyle: loadStyle,
-            height: height);
+  }) : super(onClick: onClick as void Function()?);
   final FooterBuilder builder;
 
   final OffsetCallBack? onOffsetChange;
