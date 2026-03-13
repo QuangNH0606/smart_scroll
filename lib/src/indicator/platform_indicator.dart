@@ -31,9 +31,8 @@ class PlatformHeader extends RefreshIndicator {
     this.backgroundColor,
     this.distance = 50.0,
   }) : super(
-          refreshStyle: _isApplePlatform()
-              ? RefreshStyle.UnFollow
-              : RefreshStyle.Front,
+          refreshStyle:
+              _isApplePlatform() ? RefreshStyle.UnFollow : RefreshStyle.Front,
         );
 
   /// The primary color of the indicator.
@@ -380,8 +379,7 @@ class _PlatformFooterState extends LoadIndicatorState<PlatformFooter> {
 
   // ─── Android: Material style with text labels ───
   Widget _buildMaterialFooter(BuildContext context, LoadStatus? mode) {
-    final Color textColor =
-        widget.color ?? Colors.grey.shade600;
+    final Color textColor = widget.color ?? Colors.grey.shade600;
     final TextStyle style = TextStyle(color: textColor, fontSize: 14);
 
     Widget body;

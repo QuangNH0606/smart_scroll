@@ -45,8 +45,7 @@ class DemoSelector extends StatelessWidget {
           const Divider(),
           ListTile(
             title: const Text('🆕 PlatformHeader Demo'),
-            subtitle:
-                const Text('iOS = Cupertino spinner, Android = Material'),
+            subtitle: const Text('iOS = Cupertino spinner, Android = Material'),
             trailing: const Icon(Icons.chevron_right),
             onTap: () => Navigator.push(
               context,
@@ -205,8 +204,7 @@ class BuilderHeaderDemo extends StatefulWidget {
 }
 
 class _BuilderHeaderDemoState extends State<BuilderHeaderDemo> {
-  List<String> items =
-      List.generate(15, (i) => 'Item ${i + 1}');
+  List<String> items = List.generate(15, (i) => 'Item ${i + 1}');
   final RefreshController _refreshController =
       RefreshController(initialRefresh: false);
 
