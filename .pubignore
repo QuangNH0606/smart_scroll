@@ -5,10 +5,23 @@
 # IDE files
 .vscode/
 *.iml
+*.ipr
+*.iws
+.idea/
 
 # Build files
 build/
 .dart_tool/
+pubspec.lock
+
+# CI/CD & GitHub
+.github/
+.gitignore
+
+# Example build artifacts
+example/.metadata
+example/pubspec.lock
+example/build/
 
 # OS files
 .DS_Store

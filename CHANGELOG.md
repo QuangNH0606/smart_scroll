@@ -5,6 +5,27 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.0.2]
+
+### Added
+- **PlatformHeader** — native-adaptive refresh indicator (iOS Cupertino / Android Material)
+- **PlatformFooter** — native-adaptive load-more footer
+- **BuilderHeader** / **BuilderFooter** — custom indicator API with `dragProgress`, `offset`, `triggered` data
+- `RefreshIndicatorData` / `LoadIndicatorData` — rich state classes for custom animation builders
+- `RefreshController` convenience methods: `refreshCompleted()`, `loadComplete()`, `loadFailed()`, `loadNoData()`, `resetNoData()`
+- GitHub Actions CI workflow (analyze, format, test)
+- PR template, issue templates, CONTRIBUTING.md
+
+### Improved
+- Scroll physics: cached configuration values to avoid per-frame InheritedWidget lookups
+- Platform-aware overscroll behavior (iOS bouncing vs Android clamping)
+- Reduced unnecessary rebuilds in indicator state management
+
+### Fixed
+- Removed stale TODO comments and unnecessary overrides
+- Fixed lint warnings across all source files
+- Cleaned up code formatting
+
 ## [1.0.1] 
 
 ### Fixed
