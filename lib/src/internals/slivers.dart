@@ -119,13 +119,6 @@ class RenderSliverRefresh extends RenderSliverSingleBoxAdapter {
   double layoutExtentOffsetCompensation = 0.0;
 
   @override
-  void performResize() {
-    // TODO: implement performResize
-    super.performResize();
-  }
-
-  @override
-  // TODO: implement centerOffsetAdjustment
   double get centerOffsetAdjustment {
     if (refreshStyle == RefreshStyle.Front) {
       final RenderViewportBase renderViewport =
@@ -137,7 +130,6 @@ class RenderSliverRefresh extends RenderSliverSingleBoxAdapter {
 
   @override
   void layout(Constraints constraints, {bool parentUsesSize = false}) {
-    // TODO: implement layout
     if (refreshStyle == RefreshStyle.Front) {
       final RenderViewportBase renderViewport =
           parent as RenderViewportBase<ContainerParentDataMixin<RenderSliver>>;
@@ -181,6 +173,10 @@ class RenderSliverRefresh extends RenderSliverSingleBoxAdapter {
   @override
   void performLayout() {
     if (_updateFlag) {
+      // WORKAROUND: Calling applyNewDimensions() inside performLayout() violates
+      // the render pipeline contract. However, this is necessary to force
+      // shouldAcceptUserOffset re-evaluation when entering/exiting two-level mode.
+      // Flutter's ScrollPhysics API does not provide an official hook for this.
       // ignore_for_file: INVALID_USE_OF_PROTECTED_MEMBER
       // ignore_for_file: INVALID_USE_OF_VISIBLE_FOR_TESTING_MEMBER
       Scrollable.of(context).position.activity!.applyNewDimensions();
@@ -458,9 +454,11 @@ class RenderSliverLoading extends RenderSliverSingleBoxAdapter {
       geometry = SliverGeometry.zero;
       return;
     }
+    // Cache result to avoid redundant viewport child traversal (was called 4x)
+    final bool isFull = _computeIfFull(constraints);
     bool active;
     if (hideWhenNotFull! && mode != LoadStatus.noMore) {
-      active = _computeIfFull(constraints);
+      active = isFull;
     } else {
       active = true;
     }
@@ -481,20 +479,15 @@ class RenderSliverLoading extends RenderSliverSingleBoxAdapter {
     assert(paintedChildSize.isFinite);
     assert(paintedChildSize >= 0.0);
     if (active) {
-      // consider reverse loading and HideAlways==loadStyle
+      final bool hasExtent = _hasLayoutExtent! && isFull;
       geometry = SliverGeometry(
-        scrollExtent: !_hasLayoutExtent! || !_computeIfFull(constraints)
-            ? 0
-            : layoutExtent,
+        scrollExtent: hasExtent ? layoutExtent : 0,
         paintExtent: paintedChildSize,
-        // this need to fix later
         paintOrigin: computePaintOrigin(
-            !_hasLayoutExtent! || !_computeIfFull(constraints)
-                ? layoutExtent
-                : 0.0,
+            hasExtent ? 0.0 : layoutExtent,
             constraints.axisDirection == AxisDirection.up ||
                 constraints.axisDirection == AxisDirection.left,
-            _computeIfFull(constraints) || shouldFollowContent!)!,
+            isFull || shouldFollowContent!)!,
         cacheExtent: cacheExtent,
         maxPaintExtent: childExtent,
         hitTestExtent: paintedChildSize,
@@ -526,36 +519,35 @@ class RenderSliverRefreshBody extends RenderSliverSingleBoxAdapter {
     super.child,
   });
 
+  /// Large finite value used to detect children with no intrinsic size.
+  /// Children that expand to fill available space will reach this value,
+  /// triggering a fallback layout constrained to the viewport extent.
+  static const double _kUnboundedExtent = 100000.0;
+
   @override
   void performLayout() {
     if (child == null) {
       geometry = SliverGeometry.zero;
       return;
     }
-    child!.layout(constraints.asBoxConstraints(maxExtent: 1111111),
-        parentUsesSize: true);
-    double? childExtent;
-    switch (constraints.axis) {
-      case Axis.horizontal:
-        childExtent = child!.size.width;
-        break;
-      case Axis.vertical:
-        childExtent = child!.size.height;
-        break;
-    }
-    if (childExtent == 1111111) {
+    // First layout: discover child's intrinsic size using a large max extent.
+    child!.layout(
+      constraints.asBoxConstraints(maxExtent: _kUnboundedExtent),
+      parentUsesSize: true,
+    );
+    double childExtent = constraints.axis == Axis.vertical
+        ? child!.size.height
+        : child!.size.width;
+    // If child expanded to fill (no intrinsic size), re-layout with viewport extent.
+    if (childExtent >= _kUnboundedExtent) {
       child!.layout(
-          constraints.asBoxConstraints(
-              maxExtent: constraints.viewportMainAxisExtent),
-          parentUsesSize: true);
-    }
-    switch (constraints.axis) {
-      case Axis.horizontal:
-        childExtent = child!.size.width;
-        break;
-      case Axis.vertical:
-        childExtent = child!.size.height;
-        break;
+        constraints.asBoxConstraints(
+            maxExtent: constraints.viewportMainAxisExtent),
+        parentUsesSize: true,
+      );
+      childExtent = constraints.axis == Axis.vertical
+          ? child!.size.height
+          : child!.size.width;
     }
     final double paintedChildSize =
         calculatePaintOffset(constraints, from: 0.0, to: childExtent);

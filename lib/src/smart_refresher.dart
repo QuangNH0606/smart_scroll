@@ -344,8 +344,8 @@ class SmartScrollState extends State<SmartScroll> {
             dragSpeedRatio: conf?.dragSpeedRatio ?? 1,
             springDescription: conf?.springDescription ??
                 const SpringDescription(
-                  mass: 2.2,
-                  stiffness: 150,
+                  mass: 1.0,
+                  stiffness: 100,
                   damping: 16,
                 ),
             controller: widget.controller,
@@ -358,11 +358,12 @@ class SmartScrollState extends State<SmartScroll> {
             maxOverScrollExtent: conf?.maxOverScrollExtent ??
                 (isBouncingPhysics ? double.infinity : 60.0),
             topHitBoundary: conf?.topHitBoundary ??
-                (isBouncingPhysics
-                    ? double.infinity
-                    : 0.0), // need to fix default value by ios or android later
+                (isBouncingPhysics ? double.infinity : 0.0),
             bottomHitBoundary: conf?.bottomHitBoundary ??
-                (isBouncingPhysics ? double.infinity : 0.0))
+                (isBouncingPhysics ? double.infinity : 0.0),
+            // Cache config values to avoid per-frame InheritedWidget lookup
+            enableLoadingWhenNoData: conf?.enableLoadingWhenNoData ?? false,
+            hideFooterWhenNotFull: conf?.hideFooterWhenNotFull ?? false)
         .applyTo(!_canDrag ? const NeverScrollableScrollPhysics() : physics);
   }
 
@@ -544,12 +545,17 @@ class SmartScrollState extends State<SmartScroll> {
     if (configuration == null) {
       body = RefreshConfiguration(child: body!);
     }
-    return LayoutBuilder(
-      builder: (c2, cons) {
-        viewportExtent = cons.biggest.height;
-        return body!;
-      },
-    );
+    // Only wrap with LayoutBuilder when TwoLevel is enabled,
+    // since viewportExtent is only used for TwoLevel indicator sizing.
+    if (widget.enableTwoLevel) {
+      return LayoutBuilder(
+        builder: (c2, cons) {
+          viewportExtent = cons.biggest.height;
+          return body!;
+        },
+      );
+    }
+    return body!;
   }
 }
 
@@ -601,6 +607,11 @@ class RefreshController {
 
   final bool initialRefresh;
 
+  /// Cached indicator states for O(1) access.
+  /// Registered by IndicatorStateMixin._updateListener() in indicator_wrap.dart
+  RefreshIndicatorState? headerIndicatorState;
+  LoadIndicatorState? footerIndicatorState;
+
   void _bindState(SmartScrollState state) {
     assert(_refresherState == null,
         "Don't use one refreshController to multiple SmartScroll,It will cause some unexpected bugs mostly in TabBarView");
@@ -619,24 +630,6 @@ class RefreshController {
     position?.isScrollingNotifier.removeListener(_listenScrollEnd);
   }
 
-  StatefulElement? _findIndicator(BuildContext context, Type elementType) {
-    StatefulElement? result;
-    context.visitChildElements((Element e) {
-      if (elementType == RefreshIndicator) {
-        if (e.widget is RefreshIndicator) {
-          result = e as StatefulElement?;
-        }
-      } else {
-        if (e.widget is LoadIndicator) {
-          result = e as StatefulElement?;
-        }
-      }
-
-      result ??= _findIndicator(e, elementType);
-    });
-    return result;
-  }
-
   /// when bounce out of edge and stopped by overScroll or underScroll, it should be SpringBack to 0.0
   /// but ScrollPhysics didn't provide one way to spring back when outOfEdge(stopped by applyBouncingCondition return != 0.0)
   /// so for making it spring back, it should be trigger goBallistic make it spring back
@@ -651,26 +644,24 @@ class RefreshController {
       {bool needMove = true,
       bool needCallback = true,
       Duration duration = const Duration(milliseconds: 500),
-      Curve curve = Curves.linear}) {
+      Curve curve = Curves.easeOutCubic}) {
     assert(position != null,
         'Try not to call requestRefresh() before build,please call after the ui was rendered');
     if (isRefresh) {
       return Future.value();
     }
-    final StatefulElement? indicatorElement =
-        _findIndicator(position!.context.storageContext, RefreshIndicator);
-
-    if (indicatorElement == null || _refresherState == null) {
+    if (headerIndicatorState == null ||
+        !headerIndicatorState!.mounted ||
+        _refresherState == null) {
       return null;
     }
-    (indicatorElement.state as RefreshIndicatorState).floating = true;
+    headerIndicatorState!.floating = true;
 
     if (needMove && _refresherState!.mounted) {
       _refresherState!.setCanDrag(false);
     }
     if (needMove) {
       return Future.delayed(const Duration(milliseconds: 50)).then((_) async {
-        // - 0.0001 is for NestedScrollView.
         await position
             ?.animateTo(position!.minScrollExtent - 0.0001,
                 duration: duration, curve: curve)
@@ -681,9 +672,9 @@ class RefreshController {
               headerMode!.value = RefreshStatus.refreshing;
             } else {
               headerMode!.setValueWithNoNotify(RefreshStatus.refreshing);
-              if (indicatorElement.state.mounted) {
-                (indicatorElement.state as RefreshIndicatorState)
-                    .setState(() {});
+              if (headerIndicatorState != null &&
+                  headerIndicatorState!.mounted) {
+                headerIndicatorState!.update();
               }
             }
           }
@@ -700,7 +691,7 @@ class RefreshController {
   /// make the header enter refreshing state,and callback onRefresh
   Future<void> requestTwoLevel(
       {Duration duration = const Duration(milliseconds: 300),
-      Curve curve = Curves.linear}) {
+      Curve curve = Curves.easeOutCubic}) {
     assert(position != null,
         'Try not to call requestRefresh() before build,please call after the ui was rendered');
     headerMode!.value = RefreshStatus.twoLevelOpening;
@@ -715,19 +706,18 @@ class RefreshController {
       {bool needMove = true,
       bool needCallback = true,
       Duration duration = const Duration(milliseconds: 300),
-      Curve curve = Curves.linear}) {
+      Curve curve = Curves.easeOutCubic}) {
     assert(position != null,
         'Try not to call requestLoading() before build,please call after the ui was rendered');
     if (isLoading) {
       return Future.value();
     }
-    final StatefulElement? indicatorElement =
-        _findIndicator(position!.context.storageContext, LoadIndicator);
-
-    if (indicatorElement == null || _refresherState == null) {
+    if (footerIndicatorState == null ||
+        !footerIndicatorState!.mounted ||
+        _refresherState == null) {
       return null;
     }
-    (indicatorElement.state as LoadIndicatorState).floating = true;
+    footerIndicatorState!.floating = true;
     if (needMove && _refresherState!.mounted) {
       _refresherState!.setCanDrag(false);
     }
@@ -743,8 +733,9 @@ class RefreshController {
               footerMode!.value = LoadStatus.loading;
             } else {
               footerMode!.setValueWithNoNotify(LoadStatus.loading);
-              if (indicatorElement.state.mounted) {
-                (indicatorElement.state as LoadIndicatorState).setState(() {});
+              if (footerIndicatorState != null &&
+                  footerIndicatorState!.mounted) {
+                footerIndicatorState!.update();
               }
             }
           }
@@ -770,7 +761,7 @@ class RefreshController {
   /// end twoLeveling,will return back first floor
   Future<void>? twoLevelComplete(
       {Duration duration = const Duration(milliseconds: 500),
-      Curve curve = Curves.linear}) {
+      Curve curve = Curves.easeOutCubic}) {
     headerMode?.value = RefreshStatus.twoLevelClosing;
     WidgetsBinding.instance.addPostFrameCallback((_) {
       position!
@@ -849,8 +840,8 @@ class RefreshConfiguration extends InheritedWidget {
       this.enableLoadingWhenNoData = false,
       this.enableBallisticRefresh = false,
       this.springDescription = const SpringDescription(
-        mass: 2.2,
-        stiffness: 150,
+        mass: 1.0,
+        stiffness: 100,
         damping: 16,
       ),
       this.enableScrollWhenRefreshCompleted = false,
@@ -864,8 +855,8 @@ class RefreshConfiguration extends InheritedWidget {
       this.headerTriggerDistance = 80.0,
       this.footerTriggerDistance = 15.0,
       this.hideFooterWhenNotFull = false,
-      this.enableRefreshVibrate = false,
-      this.enableLoadMoreVibrate = false,
+      this.enableRefreshVibrate = true,
+      this.enableLoadMoreVibrate = true,
       this.topHitBoundary,
       this.bottomHitBoundary})
       : assert(headerTriggerDistance > 0),

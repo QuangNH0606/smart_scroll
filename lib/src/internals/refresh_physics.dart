@@ -2,6 +2,9 @@
 
 import 'dart:math' as math;
 
+import 'package:flutter/foundation.dart'
+    show defaultTargetPlatform, TargetPlatform;
+import 'package:flutter/gestures.dart' show kMinFlingVelocity;
 import 'package:flutter/rendering.dart';
 import 'package:flutter/widgets.dart';
 import 'package:smart_scroll/smart_scroll.dart';
@@ -26,6 +29,13 @@ class RefreshPhysics extends ScrollPhysics {
   final RefreshController? controller;
   final int? updateFlag;
 
+  /// Cached config values to avoid per-frame InheritedWidget lookup.
+  /// Populated from RefreshConfiguration in _getScrollPhysics() and
+  /// preserved through applyTo(). Safe because physics is recreated
+  /// when config changes (via didChangeDependencies).
+  final bool enableLoadingWhenNoData;
+  final bool hideFooterWhenNotFull;
+
   /// find out the viewport when bouncing,for compute the layoutExtent in header and footer
   /// This does not have any impact on performance. it only  execute once
   RenderViewport? viewportRender;
@@ -42,11 +52,13 @@ class RefreshPhysics extends ScrollPhysics {
       this.bottomHitBoundary,
       this.enableScrollWhenRefreshCompleted,
       this.enableScrollWhenTwoLevel,
-      this.maxOverScrollExtent});
+      this.maxOverScrollExtent,
+      this.enableLoadingWhenNoData = false,
+      this.hideFooterWhenNotFull = false});
 
   @override
   RefreshPhysics applyTo(ScrollPhysics? ancestor) {
-    return RefreshPhysics(
+    final result = RefreshPhysics(
         parent: buildParent(ancestor),
         updateFlag: updateFlag,
         springDescription: springDescription,
@@ -57,7 +69,12 @@ class RefreshPhysics extends ScrollPhysics {
         controller: controller,
         enableScrollWhenRefreshCompleted: enableScrollWhenRefreshCompleted,
         maxUnderScrollExtent: maxUnderScrollExtent,
-        maxOverScrollExtent: maxOverScrollExtent);
+        maxOverScrollExtent: maxOverScrollExtent,
+        enableLoadingWhenNoData: enableLoadingWhenNoData,
+        hideFooterWhenNotFull: hideFooterWhenNotFull);
+    // Preserve cached viewport reference to avoid repeated tree traversal
+    result.viewportRender = viewportRender;
+    return result;
   }
 
   RenderViewport? findViewport(BuildContext? context) {
@@ -66,9 +83,10 @@ class RefreshPhysics extends ScrollPhysics {
     }
     RenderViewport? result;
     context.visitChildElements((Element e) {
+      // Skip remaining siblings once viewport is found
+      if (result != null) return;
       final RenderObject? renderObject = e.findRenderObject();
       if (renderObject is RenderViewport) {
-        assert(result == null);
         result = renderObject;
       } else {
         result = findViewport(e);
@@ -85,10 +103,16 @@ class RefreshPhysics extends ScrollPhysics {
     return true;
   }
 
-  //  It seem that it was odd to do so,but I have no choose to do this for updating the state value(enablePullDown and enablePullUp),
-  // in Scrollable.dart _shouldUpdatePosition method,it use physics.runtimeType to check if the two physics is the same,this
-  // will lead to whether the newPhysics should replace oldPhysics,If flutter can provide a method such as "shouldUpdate",
-  // It can work perfectly.
+  // to detect physics changes. Flutter's ScrollableState compares
+  // oldPhysics.runtimeType != newPhysics.runtimeType to decide whether to
+  // recreate the ScrollPosition. By alternating between RefreshPhysics and
+  // BouncingScrollPhysics types via updateFlag, we force ScrollPosition
+  // updates when enablePullDown/enablePullUp state changes.
+  //
+  // WARNING: This breaks `is` operator checks, debugPrint, and reflection.
+  // There is no clean alternative until Flutter exposes a `shouldUpdate()`
+  // hook on ScrollPhysics. This pattern is also used by flutter_pulltorefresh
+  // and easy_refresh libraries.
   @override
   Type get runtimeType {
     if (updateFlag == 0) {
@@ -102,7 +126,8 @@ class RefreshPhysics extends ScrollPhysics {
   double applyPhysicsToUserOffset(ScrollMetrics position, double offset) {
     viewportRender ??=
         findViewport(controller!.position?.context.storageContext);
-    if (controller!.headerMode!.value == RefreshStatus.twoLeveling) {
+    final headerModeValue = controller!.headerMode!.value;
+    if (headerModeValue == RefreshStatus.twoLeveling) {
       if (offset > 0.0) {
         return parent!.applyPhysicsToUserOffset(position, offset);
       }
@@ -113,13 +138,12 @@ class RefreshPhysics extends ScrollPhysics {
         return parent!.applyPhysicsToUserOffset(position, offset);
       }
     }
-    if (position.outOfRange ||
-        controller!.headerMode!.value == RefreshStatus.twoLeveling) {
+    if (position.outOfRange || headerModeValue == RefreshStatus.twoLeveling) {
       final double overScrollPastStart =
           math.max(position.minScrollExtent - position.pixels, 0.0);
       final double overScrollPastEnd = math.max(
           position.pixels -
-              (controller!.headerMode!.value == RefreshStatus.twoLeveling
+              (headerModeValue == RefreshStatus.twoLeveling
                   ? 0.0
                   : position.maxScrollExtent),
           0.0);
@@ -159,11 +183,56 @@ class RefreshPhysics extends ScrollPhysics {
   double frictionFactor(double overScrollFraction) =>
       0.52 * math.pow(1 - overScrollFraction, 2);
 
+  // ── Fling behavior overrides ──────────────────────────────────────
+  // These ensure consistent scroll feel even though RefreshPhysics
+  // sits in the physics chain with a runtimeType hack that can
+  // break parent delegation.
+
+  /// iOS momentum stacking: repeated quick flings accumulate speed.
+  /// Without this override, the runtimeType hack can break the
+  /// parent chain and lose momentum transfer between flings.
+  ///
+  /// Formula from Flutter's BouncingScrollPhysics — empirically
+  /// calibrated against native iOS UIScrollView:
+  ///   velocity_carry = sign * min(0.000816 * |v|^1.967, 40000)
+  @override
+  double carriedMomentum(double existingVelocity) {
+    return existingVelocity.sign *
+        math.min(
+          0.000816 * math.pow(existingVelocity.abs(), 1.967).toDouble(),
+          40000.0,
+        );
+  }
+
+  /// Minimum velocity required to trigger a fling animation.
+  /// BouncingScrollPhysics uses 2x the default to require more
+  /// deliberate gestures (matching iOS feel).
+  /// Explicit override prevents the runtimeType hack from
+  /// accidentally falling back to the wrong threshold.
+  @override
+  double get minFlingVelocity {
+    switch (defaultTargetPlatform) {
+      case TargetPlatform.iOS:
+      case TargetPlatform.macOS:
+        // iOS: higher threshold = more deliberate flings required
+        return kMinFlingVelocity * 2.0;
+      default:
+        // Android/others: standard threshold
+        return kMinFlingVelocity;
+    }
+  }
+
+  /// Filters out unintentional scroll from natural finger-lift motion.
+  /// 3.5 pixels is the iOS-calibrated threshold from BouncingScrollPhysics.
+  @override
+  double get dragStartDistanceMotionThreshold => 3.5;
+
   @override
   double applyBoundaryConditions(ScrollMetrics position, double value) {
     final ScrollPosition scrollPosition = position as ScrollPosition;
     viewportRender ??=
         findViewport(controller!.position?.context.storageContext);
+    final headerModeValue = controller!.headerMode!.value;
     final bool notFull = position.minScrollExtent == position.maxScrollExtent;
     final bool enablePullDown = viewportRender == null
         ? false
@@ -171,7 +240,7 @@ class RefreshPhysics extends ScrollPhysics {
     final bool enablePullUp = viewportRender == null
         ? false
         : viewportRender!.lastChild is RenderSliverLoading;
-    if (controller!.headerMode!.value == RefreshStatus.twoLeveling) {
+    if (headerModeValue == RefreshStatus.twoLeveling) {
       if (position.pixels - value > 0.0) {
         return parent!.applyBoundaryConditions(position, value);
       }
@@ -193,17 +262,12 @@ class RefreshPhysics extends ScrollPhysics {
     if (enablePullUp) {
       final RenderSliverLoading? sliverFooter =
           viewportRender!.lastChild as RenderSliverLoading?;
+      // Use cached config fields instead of per-frame InheritedWidget lookup
       bottomExtra = (!notFull && sliverFooter!.geometry!.scrollExtent != 0) ||
               (notFull &&
                   controller!.footerStatus == LoadStatus.noMore &&
-                  !RefreshConfiguration.of(
-                          controller!.position!.context.storageContext)!
-                      .enableLoadingWhenNoData) ||
-              (notFull &&
-                  (RefreshConfiguration.of(
-                              controller!.position!.context.storageContext)
-                          ?.hideFooterWhenNotFull ??
-                      false))
+                  !enableLoadingWhenNoData) ||
+              (notFull && hideFooterWhenNotFull)
           ? 0.0
           : sliverFooter!.layoutExtent;
     }
@@ -270,7 +334,8 @@ class RefreshPhysics extends ScrollPhysics {
     final bool enablePullUp = viewportRender == null
         ? false
         : viewportRender!.lastChild is RenderSliverLoading;
-    if (controller!.headerMode!.value == RefreshStatus.twoLeveling) {
+    final headerModeValue = controller!.headerMode!.value;
+    if (headerModeValue == RefreshStatus.twoLeveling) {
       if (velocity < 0.0) {
         return parent!.createBallisticSimulation(position, velocity);
       }
@@ -280,19 +345,19 @@ class RefreshPhysics extends ScrollPhysics {
         return parent!.createBallisticSimulation(position, velocity);
       }
     }
-    if ((position.pixels > 0 &&
-            controller!.headerMode!.value == RefreshStatus.twoLeveling) ||
+    if ((position.pixels > 0 && headerModeValue == RefreshStatus.twoLeveling) ||
         position.outOfRange) {
       return BouncingScrollSimulation(
         spring: springDescription ?? spring,
         position: position.pixels,
-        // -1.0 avoid stop springing back ,and release gesture
+        // Dampen velocity by 0.91 to prevent abrupt spring-back stops
+        // when the user releases a drag gesture near the overscroll edge.
+        // Without this, BouncingScrollSimulation can settle prematurely.
         velocity: velocity * 0.91,
         leadingExtent: position.minScrollExtent,
-        trailingExtent:
-            controller!.headerMode!.value == RefreshStatus.twoLeveling
-                ? 0.0
-                : position.maxScrollExtent,
+        trailingExtent: headerModeValue == RefreshStatus.twoLeveling
+            ? 0.0
+            : position.maxScrollExtent,
         // ignore: deprecated_member_use
         tolerance: tolerance,
       );

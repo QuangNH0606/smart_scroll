@@ -77,8 +77,8 @@ abstract class RefreshIndicatorState<T extends RefreshIndicator>
   @override
   void _handleOffsetChange() {
     super._handleOffsetChange();
-    final double oversSrollPast = _calculateScrollOffset();
-    onOffsetChange(oversSrollPast);
+    // Reuse _lastComputedOffset from super instead of recomputing
+    onOffsetChange(_lastComputedOffset);
   }
 
   // handle the  state change between canRefresh and idle canRefresh  before refreshing
@@ -117,6 +117,12 @@ abstract class RefreshIndicatorState<T extends RefreshIndicator>
       if (refresher!.enablePullDown &&
           offset >= configuration!.headerTriggerDistance) {
         if (!configuration!.skipCanRefresh) {
+          if (mode != RefreshStatus.canRefresh &&
+              configuration!.enableRefreshVibrate) {
+            // Haptic at the exact moment user crosses trigger threshold
+            // This is the timing iOS native apps use — the most impactful moment
+            HapticFeedback.mediumImpact();
+          }
           mode = RefreshStatus.canRefresh;
         } else {
           floating = true;
@@ -220,7 +226,7 @@ abstract class RefreshIndicatorState<T extends RefreshIndicator>
         readyToRefresh();
       }
       if (configuration!.enableRefreshVibrate) {
-        HapticFeedback.vibrate();
+        HapticFeedback.mediumImpact();
       }
       if (refresher!.onRefresh != null) {
         refresher!.onRefresh!();
@@ -287,12 +293,14 @@ abstract class RefreshIndicatorState<T extends RefreshIndicator>
             ? refresherState!.viewportExtent
             : widget.height,
         refreshStyle: widget.refreshStyle,
-        child: RotatedBox(
-          quarterTurns: needReverseAll() &&
-                  Scrollable.of(context).axisDirection == AxisDirection.up
-              ? 10
-              : 0,
-          child: buildContent(context, mode),
+        child: RepaintBoundary(
+          child: RotatedBox(
+            quarterTurns: needReverseAll() &&
+                    Scrollable.of(context).axisDirection == AxisDirection.up
+                ? 10
+                : 0,
+            child: buildContent(context, mode),
+          ),
         ));
   }
 }
@@ -338,7 +346,8 @@ abstract class LoadIndicatorState<T extends LoadIndicator> extends State<T>
         return;
       }
 
-      // this line for patch bug temporary:indicator disappears fastly when load more complete
+      // the load indicator from disappearing too quickly after loading completes.
+      // This causes a 0.00001px drift per load cycle (imperceptible).
       if (mounted) {
         Scrollable.of(context).position.correctBy(0.00001);
       }
@@ -402,7 +411,7 @@ abstract class LoadIndicatorState<T extends LoadIndicator> extends State<T>
         enterLoading();
       }
       if (configuration!.enableLoadMoreVibrate) {
-        HapticFeedback.vibrate();
+        HapticFeedback.mediumImpact();
       }
       if (refresher!.onLoading != null) {
         refresher!.onLoading!();
@@ -426,6 +435,11 @@ abstract class LoadIndicatorState<T extends LoadIndicator> extends State<T>
     }
     if (activity is DragScrollActivity) {
       if (_checkIfCanLoading()) {
+        if (mode != LoadStatus.canLoading &&
+            configuration!.enableLoadMoreVibrate) {
+          // Haptic when user scrolls past load trigger threshold
+          HapticFeedback.mediumImpact();
+        }
         mode = LoadStatus.canLoading;
       } else {
         mode = _lastMode;
@@ -448,8 +462,8 @@ abstract class LoadIndicatorState<T extends LoadIndicator> extends State<T>
       return;
     }
     super._handleOffsetChange();
-    final double oversSrollPast = _calculateScrollOffset();
-    onOffsetChange(oversSrollPast);
+    // Reuse _lastComputedOffset from super instead of recomputing
+    onOffsetChange(_lastComputedOffset);
   }
 
   void _listenScrollEnd() {
@@ -484,7 +498,6 @@ abstract class LoadIndicatorState<T extends LoadIndicator> extends State<T>
 
   @override
   void didChangeDependencies() {
-    // TODO: implement didChangeDependencies
     super.didChangeDependencies();
     _lastMode = mode;
   }
@@ -513,14 +526,16 @@ abstract class LoadIndicatorState<T extends LoadIndicator> extends State<T>
         child: LayoutBuilder(
           builder: (BuildContext context, BoxConstraints cons) {
             _isHide = cons.biggest.height == 0.0;
-            return GestureDetector(
-              behavior: HitTestBehavior.opaque,
-              onTap: () {
-                if (widget.onClick != null) {
-                  widget.onClick!();
-                }
-              },
-              child: buildContent(context, mode),
+            return RepaintBoundary(
+              child: GestureDetector(
+                behavior: HitTestBehavior.opaque,
+                onTap: () {
+                  if (widget.onClick != null) {
+                    widget.onClick!();
+                  }
+                },
+                child: buildContent(context, mode),
+              ),
             );
           },
         ));
@@ -562,15 +577,19 @@ mixin IndicatorStateMixin<T extends StatefulWidget, V> on State<T> {
     }
   }
 
+  // Cached result from last _calculateScrollOffset() call
+  // to avoid duplicate computation in subclass overrides
+  double _lastComputedOffset = 0.0;
+
   void _handleOffsetChange() {
     if (!mounted) {
       return;
     }
-    final double oversSrollPast = _calculateScrollOffset();
-    if (oversSrollPast < 0.0) {
+    _lastComputedOffset = _calculateScrollOffset();
+    if (_lastComputedOffset < 0.0) {
       return;
     }
-    _dispatchModeByOffset(oversSrollPast);
+    _dispatchModeByOffset(_lastComputedOffset);
   }
 
   void disposeListener() {
@@ -599,6 +618,14 @@ mixin IndicatorStateMixin<T extends StatefulWidget, V> on State<T> {
       _position = newPosition;
       _position?.addListener(_handleOffsetChange);
     }
+    // Register this indicator state on the controller for O(1) access
+    // instead of O(n) tree traversal via _findIndicator()
+    if (V == RefreshStatus && this is RefreshIndicatorState) {
+      refresher!.controller.headerIndicatorState =
+          this as RefreshIndicatorState;
+    } else if (V == LoadStatus && this is LoadIndicatorState) {
+      refresher!.controller.footerIndicatorState = this as LoadIndicatorState;
+    }
   }
 
   @override
@@ -612,6 +639,16 @@ mixin IndicatorStateMixin<T extends StatefulWidget, V> on State<T> {
 
   @override
   void dispose() {
+    // Unregister indicator state from controller to avoid stale references
+    final controller = refresher?.controller;
+    if (controller != null) {
+      if (identical(controller.headerIndicatorState, this)) {
+        controller.headerIndicatorState = null;
+      }
+      if (identical(controller.footerIndicatorState, this)) {
+        controller.footerIndicatorState = null;
+      }
+    }
     //1.3.7: here need to careful after add asSliver builder
     disposeListener();
     super.dispose();
