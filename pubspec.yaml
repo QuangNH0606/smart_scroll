@@ -1,20 +1,14 @@
 name: smart_scroll
 description: >-
-  A Flutter pull-to-refresh and infinite scroll widget.
-  Supports pull down to refresh, pull up to load more, pagination,
-  custom indicators (Material, Cupertino, WaterDrop, Bezier),
-  horizontal/vertical scrolling, and works with ListView, GridView, CustomScrollView.
-version: 1.0.3
-homepage: https://github.com/QuangNH0606/smart_scroll
-repository: https://github.com/QuangNH0606/smart_scroll
-issue_tracker: https://github.com/QuangNH0606/smart_scroll/issues
-
+  A powerful pull-to-refresh and infinite scroll (load more) pagination widget for Flutter. 
+  A modern, high-performance alternative to flutter_pulltorefresh.
 topics:
-  - refresh
-  - scroll
+  - pull-to-refresh
+  - infinite-scroll
   - pagination
-  - listview
-  - loading
+  - load-more
+  - scroll
+  - refresh
 
 screenshots:
   - description: 'Basic pull-to-refresh and load more example'
