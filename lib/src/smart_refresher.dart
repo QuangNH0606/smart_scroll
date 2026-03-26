@@ -291,6 +291,10 @@ class SmartScrollState extends State<SmartScroll> {
   //build slivers from child Widget
   List<Widget>? _buildSliversByChild(BuildContext context, Widget? child,
       RefreshConfiguration? configuration) {
+    if (child == null) {
+      return null; // Prevent ghost container when using slivers-only layout
+    }
+
     List<Widget>? slivers;
     if (child is ScrollView) {
       if (child is BoxScrollView) {
@@ -307,7 +311,7 @@ class SmartScrollState extends State<SmartScroll> {
     } else if (child is! Scrollable) {
       slivers = [
         SliverRefreshBody(
-          child: child ?? Container(),
+          child: child,
         )
       ];
     }
@@ -330,6 +334,29 @@ class SmartScrollState extends State<SmartScroll> {
     }
 
     return slivers;
+  }
+
+  List<Widget> _buildFinalSlivers(
+      RefreshConfiguration? conf, List<Widget>? childSlivers) {
+    if (widget.child == null) {
+      // If child is null, widget.slivers is treated as the main content body.
+      // We must insert Header at the top and Footer at the bottom of widget.slivers.
+      List<Widget> finalSlivers = [];
+      if (widget.enablePullDown || widget.enableTwoLevel) {
+        finalSlivers.add(
+            widget.header ?? (conf?.headerBuilder?.call()) ?? defaultHeader);
+      }
+      finalSlivers.addAll(widget.slivers ?? []);
+      if (widget.enablePullUp) {
+        finalSlivers.add(
+            widget.footer ?? (conf?.footerBuilder?.call()) ?? defaultFooter);
+      }
+      return finalSlivers;
+    } else {
+      // Original behavior: widget.slivers acts as pre-headers (e.g., pinned SliverAppBar)
+      // and childSlivers contains Header + child's internal slivers + Footer.
+      return [...widget.slivers ?? [], ...childSlivers ?? []];
+    }
   }
 
   ScrollPhysics _getScrollPhysics(
@@ -420,7 +447,7 @@ class SmartScrollState extends State<SmartScroll> {
         center: center,
         physics: _getScrollPhysics(
             conf, physics ?? const AlwaysScrollableScrollPhysics()),
-        slivers: [...widget.slivers ?? [], ...slivers!],
+        slivers: _buildFinalSlivers(conf, slivers),
         dragStartBehavior: dragStartBehavior ?? DragStartBehavior.start,
         reverse: reverse ?? false,
       );

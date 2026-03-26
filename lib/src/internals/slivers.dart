@@ -11,12 +11,15 @@ import '../smart_refresher.dart';
 class SliverRefresh extends SingleChildRenderObjectWidget {
   const SliverRefresh({
     super.key,
+    this.mode,
     this.paintOffsetY,
     this.refreshIndicatorLayoutExtent = 0.0,
     this.floating = false,
     super.child,
     this.refreshStyle,
   }) : assert(refreshIndicatorLayoutExtent >= 0.0);
+
+  final RefreshStatus? mode;
 
   /// The amount of space the indicator should occupy in the sliver in a
   /// resting state when in the refreshing mode.
@@ -46,8 +49,6 @@ class SliverRefresh extends SingleChildRenderObjectWidget {
   @override
   void updateRenderObject(
       BuildContext context, covariant RenderSliverRefresh renderObject) {
-    final RefreshStatus mode =
-        SmartScroll.of(context)!.controller.headerMode!.value;
     renderObject
       ..refreshIndicatorLayoutExtent = refreshIndicatorLayoutExtent
       ..hasLayoutExtent = floating
@@ -173,13 +174,17 @@ class RenderSliverRefresh extends RenderSliverSingleBoxAdapter {
   @override
   void performLayout() {
     if (_updateFlag) {
-      // WORKAROUND: Calling applyNewDimensions() inside performLayout() violates
-      // the render pipeline contract. However, this is necessary to force
-      // shouldAcceptUserOffset re-evaluation when entering/exiting two-level mode.
-      // Flutter's ScrollPhysics API does not provide an official hook for this.
-      // ignore_for_file: INVALID_USE_OF_PROTECTED_MEMBER
-      // ignore_for_file: INVALID_USE_OF_VISIBLE_FOR_TESTING_MEMBER
-      Scrollable.of(context).position.activity!.applyNewDimensions();
+      // FIX: Calling applyNewDimensions() synchronously during performLayout() violates
+      // Flutter's render pipeline, creating a severe performance jank (frame drop)
+      // when the refresh completes or enters two-level.
+      // Defers the physics recalculation to the post-frame callback natively.
+      final position = Scrollable.of(context).position;
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (position.hasPixels) {
+          // ignore: INVALID_USE_OF_PROTECTED_MEMBER, INVALID_USE_OF_VISIBLE_FOR_TESTING_MEMBER
+          position.activity?.applyNewDimensions();
+        }
+      });
       _updateFlag = false;
     }
     // The new layout extent this sliver should now have.
@@ -388,14 +393,16 @@ class RenderSliverLoading extends RenderSliverSingleBoxAdapter {
     final RenderViewport viewport = parent as RenderViewport;
     RenderSliver? sliverP = viewport.firstChild;
     double totalScrollExtent = cons.precedingScrollExtent;
-    while (sliverP != this) {
+
+    // SAFE LOOP: Stops gracefully if childAfter returns null (when sliver goes off-screen)
+    // while accurately subtracting the dynamic Header expansion to prevent Footer flickering.
+    while (sliverP != null && sliverP != this) {
       if (sliverP is RenderSliverRefresh) {
-        totalScrollExtent -= sliverP.geometry!.scrollExtent;
+        totalScrollExtent -= sliverP.geometry?.scrollExtent ?? 0.0;
         break;
       }
-      sliverP = viewport.childAfter(sliverP!);
+      sliverP = viewport.childAfter(sliverP);
     }
-    // consider about footer layoutExtent,it should be subtracted it's height
     return totalScrollExtent > cons.viewportMainAxisExtent;
   }
 

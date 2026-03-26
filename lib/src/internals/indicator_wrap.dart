@@ -285,6 +285,7 @@ abstract class RefreshIndicatorState<T extends RefreshIndicator>
   @override
   Widget build(BuildContext context) {
     return SliverRefresh(
+        mode: mode,
         paintOffsetY: widget.offset,
         floating: floating,
         refreshIndicatorLayoutExtent: mode == RefreshStatus.twoLeveling ||
@@ -597,6 +598,16 @@ mixin IndicatorStateMixin<T extends StatefulWidget, V> on State<T> {
     _position?.removeListener(_handleOffsetChange);
     _position = null;
     _mode = null;
+    _cachedRenderObject = null;
+  }
+
+  RenderObject? _cachedRenderObject;
+  RenderObject? get renderSliver {
+    if (_cachedRenderObject?.attached == true) return _cachedRenderObject;
+    if (mounted) {
+      _cachedRenderObject = context.findRenderObject();
+    }
+    return _cachedRenderObject;
   }
 
   void _updateListener() {
