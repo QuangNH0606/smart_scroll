@@ -63,6 +63,17 @@ class DemoSelector extends StatelessWidget {
               MaterialPageRoute(builder: (_) => const BuilderHeaderDemo()),
             ),
           ),
+          const Divider(),
+          ListTile(
+            title: const Text('🚀 Slivers Performance Demo'),
+            subtitle: const Text(
+                '100 Image items, true lazy-loading (no shrinkWrap)'),
+            trailing: const Icon(Icons.chevron_right),
+            onTap: () => Navigator.push(
+              context,
+              MaterialPageRoute(builder: (_) => const SliversDemo()),
+            ),
+          ),
         ],
       ),
     );
@@ -379,5 +390,110 @@ class _AnimatedRefreshIndicator extends StatelessWidget {
       default:
         return '';
     }
+  }
+}
+
+// ─── Slivers Demo ──────────────────────────────────────────────────
+// Demonstrates high-performance scrolling using the `slivers` property
+// with 100+ image items, ensuring O(1) physics looks up and no shrinkWrap lag.
+class SliversDemo extends StatefulWidget {
+  const SliversDemo({super.key});
+
+  @override
+  State<SliversDemo> createState() => _SliversDemoState();
+}
+
+class _SliversDemoState extends State<SliversDemo> {
+  // Start with 100 items
+  List<int> items = List.generate(100, (i) => i);
+  final RefreshController _refreshController =
+      RefreshController(initialRefresh: false);
+
+  void _onRefresh() async {
+    await Future.delayed(const Duration(milliseconds: 1500));
+    setState(() {
+      items = List.generate(100, (i) => i);
+    });
+    _refreshController.refreshCompleted();
+  }
+
+  void _onLoading() async {
+    await Future.delayed(const Duration(milliseconds: 1000));
+    final start = items.length;
+    setState(() {
+      items.addAll(List.generate(20, (i) => start + i));
+    });
+    _refreshController.loadComplete();
+  }
+
+  @override
+  void dispose() {
+    _refreshController.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      appBar: AppBar(title: const Text('Slivers Demo (100 Images)')),
+      body: SafeArea(
+        child: SmartScroll(
+          enablePullDown: true,
+          enablePullUp: true,
+          controller: _refreshController,
+          onRefresh: _onRefresh,
+          onLoading: _onLoading,
+          header: const WaterDropHeader(),
+          // Use 'slivers' instead of 'child' for true lazy loading
+          // without needing shrinkWrap: true on inner lists.
+          slivers: [
+            SliverPadding(
+              padding: const EdgeInsets.all(16.0),
+              sliver: SliverList(
+                delegate: SliverChildBuilderDelegate(
+                  (context, index) {
+                    final itemIndex = items[index];
+                    return Card(
+                      margin: const EdgeInsets.only(bottom: 16),
+                      clipBehavior: Clip.antiAlias,
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.stretch,
+                        children: [
+                          Container(
+                            height: 200,
+                            color: Colors.grey.shade200,
+                            child: Image.network(
+                              'https://picsum.photos/seed/$itemIndex/400/200',
+                              fit: BoxFit.cover,
+                              errorBuilder: (context, error, stackTrace) =>
+                                  const Center(child: Icon(Icons.error)),
+                              loadingBuilder:
+                                  (context, child, loadingProgress) {
+                                if (loadingProgress == null) return child;
+                                return const Center(
+                                    child: CircularProgressIndicator());
+                              },
+                            ),
+                          ),
+                          Padding(
+                            padding: const EdgeInsets.all(16.0),
+                            child: Text(
+                              'Item $itemIndex (True Lazy Loading)',
+                              style: const TextStyle(
+                                  fontSize: 18, fontWeight: FontWeight.bold),
+                            ),
+                          ),
+                        ],
+                      ),
+                    );
+                  },
+                  childCount: items.length,
+                ),
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
   }
 }
