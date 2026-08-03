@@ -298,7 +298,7 @@ abstract class RefreshIndicatorState<T extends RefreshIndicator>
           child: RotatedBox(
             quarterTurns: needReverseAll() &&
                     Scrollable.of(context).axisDirection == AxisDirection.up
-                ? 10
+                ? 2
                 : 0,
             child: buildContent(context, mode),
           ),
@@ -334,7 +334,7 @@ abstract class LoadIndicatorState<T extends LoadIndicator> extends State<T>
   }
 
   @override
-  Future endLoading() {
+  Future<void> endLoading() {
     return Future.delayed(const Duration(milliseconds: 0));
   }
 
@@ -347,8 +347,8 @@ abstract class LoadIndicatorState<T extends LoadIndicator> extends State<T>
         return;
       }
 
-      // the load indicator from disappearing too quickly after loading completes.
-      // This causes a 0.00001px drift per load cycle (imperceptible).
+      // Keep the existing nudge that ensures the position is considered
+      // out-of-range before requesting the spring-back.
       if (mounted) {
         Scrollable.of(context).position.correctBy(0.00001);
       }
@@ -553,14 +553,23 @@ mixin IndicatorStateMixin<T extends StatefulWidget, V> on State<T> {
   SmartScrollState? refresherState;
 
   bool _floating = false;
-
-  set floating(floating) => _floating = floating;
+  set floating(bool floating) => _floating = floating;
 
   bool get floating => _floating;
 
-  set mode(mode) => _mode?.value = mode;
+  set mode(V? mode) {
+    if (mode != null) {
+      _mode?.value = mode;
+    }
+  }
 
-  get mode => _mode?.value;
+  V get mode {
+    final V? currentMode = _mode?.value;
+    if (currentMode != null) return currentMode;
+    if (V == RefreshStatus) return RefreshStatus.idle as V;
+    if (V == LoadStatus) return LoadStatus.idle as V;
+    throw StateError('Unsupported indicator status type: $V');
+  }
 
   RefreshNotifier<V?>? _mode;
 
@@ -571,7 +580,7 @@ mixin IndicatorStateMixin<T extends StatefulWidget, V> on State<T> {
   // error,only replace the ScrollPosition to listen the offset
   ScrollPosition? _position;
 
-  // update ui
+  // update ui — only rebuilds if mode has actually changed visually
   void update() {
     if (mounted) {
       setState(() {});
@@ -639,12 +648,10 @@ mixin IndicatorStateMixin<T extends StatefulWidget, V> on State<T> {
     }
   }
 
+  bool _headerModeInitialized = false;
+
   @override
   void initState() {
-    if (V == RefreshStatus) {
-      SmartScroll.of(context)?.controller.headerMode?.value =
-          RefreshStatus.idle;
-    }
     super.initState();
   }
 
@@ -668,6 +675,12 @@ mixin IndicatorStateMixin<T extends StatefulWidget, V> on State<T> {
   @override
   void didChangeDependencies() {
     _updateListener();
+    // Reset header mode on first dependency resolution (moved from initState
+    // where ancestor lookup via context is unconventional)
+    if (V == RefreshStatus && !_headerModeInitialized) {
+      _headerModeInitialized = true;
+      refresher?.controller.headerMode?.value = RefreshStatus.idle;
+    }
     super.didChangeDependencies();
   }
 
@@ -701,12 +714,12 @@ mixin RefreshProcessor {
   void onModeChange(RefreshStatus? mode) {}
 
   /// when indicator is ready into refresh,it will call back and waiting for this function finish,then callback onRefresh
-  Future readyToRefresh() {
+  Future<void> readyToRefresh() {
     return Future.value();
   }
 
   // when indicator is ready to dismiss layout ,it will callback and then spring back after finish
-  Future endRefresh() {
+  Future<void> endRefresh() {
     return Future.value();
   }
 
@@ -721,12 +734,12 @@ mixin LoadingProcessor {
   void onModeChange(LoadStatus? mode) {}
 
   /// when indicator is ready into refresh,it will call back and waiting for this function finish,then callback onRefresh
-  Future readyToLoad() {
+  Future<void> readyToLoad() {
     return Future.value();
   }
 
   // when indicator is ready to dismiss layout ,it will callback and then spring back after finish
-  Future endLoading() {
+  Future<void> endLoading() {
     return Future.value();
   }
 

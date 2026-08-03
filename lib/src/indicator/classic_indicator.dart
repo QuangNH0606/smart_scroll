@@ -266,7 +266,7 @@ class _ClassicFooterState extends LoadIndicatorState<ClassicFooter> {
   }
 
   @override
-  Future endLoading() {
+  Future<void> endLoading() {
     return Future.delayed(widget.completeDuration);
   }
 

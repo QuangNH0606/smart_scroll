@@ -32,7 +32,7 @@ class BezierHeader extends RefreshIndicator {
       this.bezierColor})
       : super(refreshStyle: RefreshStyle.UnFollow, height: rectHeight);
   final OffsetCallBack? onOffsetChange;
-  final ModeChangeCallBack? onModeChange;
+  final ModeChangeCallBack<RefreshStatus>? onModeChange;
   final VoidFutureCallBack? readyRefresh, endRefresh;
   final VoidCallback? onResetValue;
   final Color? bezierColor;
@@ -344,7 +344,7 @@ class _BezierCircleHeaderState extends State<BezierCircleHeader>
         _childMoveCtl.reset();
       },
       onModeChange: (m) {
-        mode = m;
+        mode = m ?? RefreshStatus.idle;
         if (m == RefreshStatus.refreshing) {
           _radialCtrl.repeat(period: const Duration(milliseconds: 500));
         }

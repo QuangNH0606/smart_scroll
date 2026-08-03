@@ -143,7 +143,7 @@ class RenderSliverRefresh extends RenderSliverSingleBoxAdapter {
     }
   }
 
-  set updateFlag(u) {
+  set updateFlag(bool u) {
     _updateFlag = u;
     markNeedsLayout();
   }
@@ -368,7 +368,7 @@ class RenderSliverLoading extends RenderSliverSingleBoxAdapter {
 
   double? _layoutExtent;
 
-  set layoutExtent(extent) {
+  set layoutExtent(double? extent) {
     if (extent == _layoutExtent) {
       return;
     }
@@ -376,7 +376,7 @@ class RenderSliverLoading extends RenderSliverSingleBoxAdapter {
     markNeedsLayout();
   }
 
-  get layoutExtent => _layoutExtent;
+  double? get layoutExtent => _layoutExtent;
 
   bool get hasLayoutExtent => _hasLayoutExtent!;
   bool? _hasLayoutExtent;
@@ -488,7 +488,7 @@ class RenderSliverLoading extends RenderSliverSingleBoxAdapter {
     if (active) {
       final bool hasExtent = _hasLayoutExtent! && isFull;
       geometry = SliverGeometry(
-        scrollExtent: hasExtent ? layoutExtent : 0,
+        scrollExtent: hasExtent ? layoutExtent! : 0,
         paintExtent: paintedChildSize,
         paintOrigin: computePaintOrigin(
             hasExtent ? 0.0 : layoutExtent,

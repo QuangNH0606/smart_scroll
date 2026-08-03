@@ -1,5 +1,7 @@
 // ignore_for_file: constant_identifier_names
 
+import 'dart:async';
+
 import 'package:flutter/foundation.dart';
 import 'package:flutter/gestures.dart';
 import 'package:flutter/widgets.dart';
@@ -134,6 +136,8 @@ class SmartScroll extends StatefulWidget {
       this.onRefresh,
       this.onLoading,
       this.onTwoLevel,
+      this.refreshTimeout,
+      this.loadTimeout,
       this.dragStartBehavior,
       this.primary,
       this.cacheExtent,
@@ -162,6 +166,8 @@ class SmartScroll extends StatefulWidget {
     this.onRefresh,
     this.onLoading,
     this.onTwoLevel,
+    this.refreshTimeout,
+    this.loadTimeout,
   })  : header = null,
         footer = null,
         child = null,
@@ -260,6 +266,16 @@ class SmartScroll extends StatefulWidget {
 
   /// copy from ScrollView,for setting in SingleChildView,not ScrollView
   final DragStartBehavior? dragStartBehavior;
+
+  /// Optional safety timeout for refresh operations.
+  /// If refresh doesn't complete within this duration, automatically calls
+  /// [RefreshController.refreshFailed]. Set null to disable (default).
+  final Duration? refreshTimeout;
+
+  /// Optional safety timeout for load operations.
+  /// If loading doesn't complete within this duration, automatically calls
+  /// [RefreshController.loadFailed]. Set null to disable (default).
+  final Duration? loadTimeout;
 
   static SmartScroll? of(BuildContext? context) {
     return context!.findAncestorWidgetOfExactType<SmartScroll>();
@@ -516,10 +532,27 @@ class SmartScrollState extends State<SmartScroll> {
   @override
   void didUpdateWidget(SmartScroll oldWidget) {
     if (widget.controller != oldWidget.controller) {
-      widget.controller.headerMode!.value =
-          oldWidget.controller.headerMode!.value;
-      widget.controller.footerMode!.value =
-          oldWidget.controller.footerMode!.value;
+      final RefreshStatus? oldHeaderStatus = oldWidget.controller.headerStatus;
+      final LoadStatus? oldFooterStatus = oldWidget.controller.footerStatus;
+
+      oldWidget.controller._detachPosition();
+      widget.controller._bindState(this);
+      widget.controller._updateTimeouts(
+        refreshTimeout: widget.refreshTimeout,
+        loadTimeout: widget.loadTimeout,
+      );
+
+      if (oldHeaderStatus != null) {
+        widget.controller.headerMode?.value = oldHeaderStatus;
+      }
+      if (oldFooterStatus != null) {
+        widget.controller.footerMode?.value = oldFooterStatus;
+      }
+    } else {
+      widget.controller._updateTimeouts(
+        refreshTimeout: widget.refreshTimeout,
+        loadTimeout: widget.loadTimeout,
+      );
     }
     super.didUpdateWidget(oldWidget);
   }
@@ -544,6 +577,10 @@ class SmartScrollState extends State<SmartScroll> {
       });
     }
     widget.controller._bindState(this);
+    widget.controller._updateTimeouts(
+      refreshTimeout: widget.refreshTimeout,
+      loadTimeout: widget.loadTimeout,
+    );
     super.initState();
   }
 
@@ -604,8 +641,87 @@ class RefreshController {
       LoadStatus? initialLoadStatus}) {
     headerMode = RefreshNotifier(initialRefreshStatus ?? RefreshStatus.idle);
     footerMode = RefreshNotifier(initialLoadStatus ?? LoadStatus.idle);
+    // Listen for mode changes to manage timeouts
+    headerMode!.addListener(_onHeaderModeChanged);
+    footerMode!.addListener(_onFooterModeChanged);
   }
   SmartScrollState? _refresherState;
+
+  /// Whether this controller has been disposed.
+  /// All public methods become no-ops after dispose.
+  bool _isDisposed = false;
+  bool _notifiersDisposed = false;
+
+  /// Safety timeout durations (set by SmartScroll widget)
+  Duration? _refreshTimeout;
+  Duration? _loadTimeout;
+  Timer? _refreshTimer;
+  Timer? _loadTimer;
+
+  void _onHeaderModeChanged() {
+    if (_isDisposed) return;
+    if (headerMode?.value == RefreshStatus.refreshing) {
+      _startRefreshTimer();
+    } else {
+      _cancelRefreshTimer();
+    }
+  }
+
+  void _onFooterModeChanged() {
+    if (_isDisposed) return;
+    if (footerMode?.value == LoadStatus.loading) {
+      _startLoadTimer();
+    } else {
+      _cancelLoadTimer();
+    }
+  }
+
+  void _startRefreshTimer() {
+    _cancelRefreshTimer();
+    if (_refreshTimeout == null) return;
+    _refreshTimer = Timer(_refreshTimeout!, () {
+      if (!_isDisposed && headerMode?.value == RefreshStatus.refreshing) {
+        refreshFailed();
+      }
+    });
+  }
+
+  void _startLoadTimer() {
+    _cancelLoadTimer();
+    if (_loadTimeout == null) return;
+    _loadTimer = Timer(_loadTimeout!, () {
+      if (!_isDisposed && footerMode?.value == LoadStatus.loading) {
+        loadFailed();
+      }
+    });
+  }
+
+  void _cancelRefreshTimer() {
+    _refreshTimer?.cancel();
+    _refreshTimer = null;
+  }
+
+  void _cancelLoadTimer() {
+    _loadTimer?.cancel();
+    _loadTimer = null;
+  }
+
+  void _updateTimeouts({
+    required Duration? refreshTimeout,
+    required Duration? loadTimeout,
+  }) {
+    final bool refreshChanged = _refreshTimeout != refreshTimeout;
+    final bool loadChanged = _loadTimeout != loadTimeout;
+    _refreshTimeout = refreshTimeout;
+    _loadTimeout = loadTimeout;
+
+    if (refreshChanged && headerMode?.value == RefreshStatus.refreshing) {
+      _startRefreshTimer();
+    }
+    if (loadChanged && footerMode?.value == LoadStatus.loading) {
+      _startLoadTimer();
+    }
+  }
 
   /// header status mode controll
   RefreshNotifier<RefreshStatus>? headerMode;
@@ -640,8 +756,17 @@ class RefreshController {
   LoadIndicatorState? footerIndicatorState;
 
   void _bindState(SmartScrollState state) {
-    assert(_refresherState == null,
-        "Don't use one refreshController to multiple SmartScroll,It will cause some unexpected bugs mostly in TabBarView");
+    if (_isDisposed) {
+      throw StateError(
+        'A disposed RefreshController cannot be bound to SmartScroll.',
+      );
+    }
+    if (_refresherState != null) {
+      throw StateError(
+        'A RefreshController can only be used with one SmartScroll widget at a time. '
+        'Create a separate RefreshController for each SmartScroll (e.g. in TabBarView).',
+      );
+    }
     _refresherState = state;
   }
 
@@ -655,6 +780,12 @@ class RefreshController {
   void _detachPosition() {
     _refresherState = null;
     position?.isScrollingNotifier.removeListener(_listenScrollEnd);
+    position = null;
+    headerIndicatorState = null;
+    footerIndicatorState = null;
+    if (_isDisposed) {
+      _disposeNotifiers();
+    }
   }
 
   /// when bounce out of edge and stopped by overScroll or underScroll, it should be SpringBack to 0.0
@@ -672,6 +803,7 @@ class RefreshController {
       bool needCallback = true,
       Duration duration = const Duration(milliseconds: 500),
       Curve curve = Curves.easeOutCubic}) {
+    if (_isDisposed) return null;
     assert(position != null,
         'Try not to call requestRefresh() before build,please call after the ui was rendered');
     if (isRefresh) {
@@ -688,17 +820,20 @@ class RefreshController {
       _refresherState!.setCanDrag(false);
     }
     if (needMove) {
-      return Future.delayed(const Duration(milliseconds: 50)).then((_) async {
+      return Future<void>.delayed(const Duration(milliseconds: 50))
+          .then((_) async {
+        if (_isDisposed) return;
         await position
             ?.animateTo(position!.minScrollExtent - 0.0001,
                 duration: duration, curve: curve)
             .then((_) {
+          if (_isDisposed) return;
           if (_refresherState != null && _refresherState!.mounted) {
             _refresherState!.setCanDrag(true);
             if (needCallback) {
-              headerMode!.value = RefreshStatus.refreshing;
+              headerMode?.value = RefreshStatus.refreshing;
             } else {
-              headerMode!.setValueWithNoNotify(RefreshStatus.refreshing);
+              headerMode?.setValueWithNoNotify(RefreshStatus.refreshing);
               if (headerIndicatorState != null &&
                   headerIndicatorState!.mounted) {
                 headerIndicatorState!.update();
@@ -708,8 +843,9 @@ class RefreshController {
         });
       });
     } else {
-      Future.value().then((_) {
-        headerMode!.value = RefreshStatus.refreshing;
+      Future<void>.value().then((_) {
+        if (_isDisposed) return;
+        headerMode?.value = RefreshStatus.refreshing;
       });
     }
     return null;
@@ -719,10 +855,13 @@ class RefreshController {
   Future<void> requestTwoLevel(
       {Duration duration = const Duration(milliseconds: 300),
       Curve curve = Curves.easeOutCubic}) {
+    if (_isDisposed) return Future.value();
     assert(position != null,
         'Try not to call requestRefresh() before build,please call after the ui was rendered');
-    headerMode!.value = RefreshStatus.twoLevelOpening;
-    return Future.delayed(const Duration(milliseconds: 50)).then((_) async {
+    headerMode?.value = RefreshStatus.twoLevelOpening;
+    return Future<void>.delayed(const Duration(milliseconds: 50))
+        .then((_) async {
+      if (_isDisposed) return;
       await position?.animateTo(position!.minScrollExtent,
           duration: duration, curve: curve);
     });
@@ -734,6 +873,7 @@ class RefreshController {
       bool needCallback = true,
       Duration duration = const Duration(milliseconds: 300),
       Curve curve = Curves.easeOutCubic}) {
+    if (_isDisposed) return null;
     assert(position != null,
         'Try not to call requestLoading() before build,please call after the ui was rendered');
     if (isLoading) {
@@ -749,17 +889,20 @@ class RefreshController {
       _refresherState!.setCanDrag(false);
     }
     if (needMove) {
-      return Future.delayed(const Duration(milliseconds: 50)).then((_) async {
+      return Future<void>.delayed(const Duration(milliseconds: 50))
+          .then((_) async {
+        if (_isDisposed) return;
         await position
             ?.animateTo(position!.maxScrollExtent,
                 duration: duration, curve: curve)
             .then((_) {
+          if (_isDisposed) return;
           if (_refresherState != null && _refresherState!.mounted) {
             _refresherState!.setCanDrag(true);
             if (needCallback) {
-              footerMode!.value = LoadStatus.loading;
+              footerMode?.value = LoadStatus.loading;
             } else {
-              footerMode!.setValueWithNoNotify(LoadStatus.loading);
+              footerMode?.setValueWithNoNotify(LoadStatus.loading);
               if (footerIndicatorState != null &&
                   footerIndicatorState!.mounted) {
                 footerIndicatorState!.update();
@@ -769,8 +912,9 @@ class RefreshController {
         });
       });
     } else {
-      return Future.value().then((_) {
-        footerMode!.value = LoadStatus.loading;
+      return Future<void>.value().then((_) {
+        if (_isDisposed) return;
+        footerMode?.value = LoadStatus.loading;
       });
     }
   }
@@ -779,6 +923,7 @@ class RefreshController {
   ///
   /// resetFooterState : it will set the footer state from noData to idle
   void refreshCompleted({bool resetFooterState = false}) {
+    if (_isDisposed) return;
     headerMode?.value = RefreshStatus.completed;
     if (resetFooterState) {
       resetNoData();
@@ -789,12 +934,15 @@ class RefreshController {
   Future<void>? twoLevelComplete(
       {Duration duration = const Duration(milliseconds: 500),
       Curve curve = Curves.easeOutCubic}) {
+    if (_isDisposed) return null;
     headerMode?.value = RefreshStatus.twoLevelClosing;
     WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (_isDisposed || position == null) return;
       position!
           .animateTo(0.0, duration: duration, curve: curve)
           .whenComplete(() {
-        headerMode!.value = RefreshStatus.idle;
+        if (_isDisposed) return;
+        headerMode?.value = RefreshStatus.idle;
       });
     });
     return null;
@@ -802,48 +950,75 @@ class RefreshController {
 
   /// request failed,the header display failed state
   void refreshFailed() {
+    if (_isDisposed) return;
     headerMode?.value = RefreshStatus.failed;
   }
 
   /// not show success or failed, it will set header state to idle and spring back at once
   void refreshToIdle() {
+    if (_isDisposed) return;
     headerMode?.value = RefreshStatus.idle;
   }
 
   /// after data returned,set the footer state to idle
   void loadComplete() {
+    if (_isDisposed) return;
     // change state after ui update,else it will have a bug:twice loading
     WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (_isDisposed) return;
       footerMode?.value = LoadStatus.idle;
     });
   }
 
   /// If catchError happen,you may call loadFailed indicate fetch data from network failed
   void loadFailed() {
+    if (_isDisposed) return;
     // change state after ui update,else it will have a bug:twice loading
     WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (_isDisposed) return;
       footerMode?.value = LoadStatus.failed;
     });
   }
 
   /// load more success without error,but no data returned
   void loadNoData() {
+    if (_isDisposed) return;
     WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (_isDisposed) return;
       footerMode?.value = LoadStatus.noMore;
     });
   }
 
   /// reset footer noData state  to idle
   void resetNoData() {
+    if (_isDisposed) return;
     if (footerMode?.value == LoadStatus.noMore) {
-      footerMode!.value = LoadStatus.idle;
+      footerMode?.value = LoadStatus.idle;
     }
   }
 
-  /// for some special situation, you should call dispose() for safe,it may throw errors after parent widget dispose
+  /// Requests disposal of this controller.
+  ///
+  /// Public operations become no-ops immediately. If a [SmartScroll] is still
+  /// attached, notifier disposal is deferred until its State detaches so an
+  /// outgoing route can safely render its final frame.
   void dispose() {
-    headerMode!.dispose();
-    footerMode!.dispose();
+    if (_isDisposed) return;
+    _isDisposed = true;
+    _cancelRefreshTimer();
+    _cancelLoadTimer();
+    if (_refresherState == null) {
+      _disposeNotifiers();
+    }
+  }
+
+  void _disposeNotifiers() {
+    if (_notifiersDisposed) return;
+    _notifiersDisposed = true;
+    headerMode?.removeListener(_onHeaderModeChanged);
+    footerMode?.removeListener(_onFooterModeChanged);
+    headerMode?.dispose();
+    footerMode?.dispose();
     headerMode = null;
     footerMode = null;
   }
