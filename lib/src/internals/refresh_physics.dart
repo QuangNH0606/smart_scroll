@@ -249,7 +249,7 @@ class RefreshPhysics extends ScrollPhysics {
                         !enableLoadingWhenNoData) ||
                     (notFull && hideFooterWhenNotFull)
                 ? 0.0
-                : sliverFooter.layoutExtent;
+                : sliverFooter.layoutExtent!;
       }
     }
 

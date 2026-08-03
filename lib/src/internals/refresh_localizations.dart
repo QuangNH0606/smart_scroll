@@ -76,19 +76,29 @@ class RefreshLocalizations {
     'sv': SvRefreshString(),
     'pt': PtRefreshString(),
     'ko': KrRefreshString(),
+    'vi': ViRefreshString(),
   };
 
   RefreshString? get currentLocalization {
     if (values.containsKey(locale.languageCode)) {
-      if (values[locale.languageCode] is RefreshString) {
-        return values[locale.languageCode];
-      } else if (values[locale.languageCode].containsKey(locale.countryCode)) {
-        return values[locale.languageCode][locale.countryCode];
-      } else {
-        return values[locale.languageCode].values.firstOrNull;
+      final dynamic langValue = values[locale.languageCode];
+      if (langValue is RefreshString) {
+        return langValue;
+      } else if (langValue is Map<String, dynamic>) {
+        if (langValue.containsKey(locale.countryCode)) {
+          return langValue[locale.countryCode] as RefreshString?;
+        } else {
+          return langValue.values.firstOrNull as RefreshString?;
+        }
+      } else if (langValue is Map<String, RefreshString>) {
+        if (langValue.containsKey(locale.countryCode)) {
+          return langValue[locale.countryCode];
+        } else {
+          return langValue.values.firstOrNull;
+        }
       }
     }
-    return values['en'];
+    return values['en'] as RefreshString?;
   }
 
   static const RefreshLocalizationsDelegate delegate =
@@ -118,7 +128,8 @@ class RefreshLocalizationsDelegate
       'pt',
       'sv',
       'nl',
-      'es'
+      'es',
+      'vi'
     ].contains(locale.languageCode);
   }
 
@@ -134,7 +145,7 @@ class RefreshLocalizationsDelegate
   }
 }
 
-/// interface implements different language
+/// Interface for localized refresh/load strings.
 abstract class RefreshString {
   /// pull down refresh idle text
   String? idleRefreshText;
@@ -672,4 +683,40 @@ class KrRefreshString implements RefreshString {
 
   @override
   String? refreshingText = '새로 고침 중…';
+}
+
+/// Vietnamese
+class ViRefreshString implements RefreshString {
+  @override
+  String? canLoadingText = 'Thả để tải thêm';
+
+  @override
+  String? canRefreshText = 'Thả để làm mới';
+
+  @override
+  String? canTwoLevelText = 'Thả để vào tầng hai';
+
+  @override
+  String? idleLoadingText = 'Kéo lên để tải thêm';
+
+  @override
+  String? idleRefreshText = 'Kéo xuống để làm mới';
+
+  @override
+  String? loadFailedText = 'Tải thất bại';
+
+  @override
+  String? loadingText = 'Đang tải…';
+
+  @override
+  String? noMoreText = 'Không còn dữ liệu';
+
+  @override
+  String? refreshCompleteText = 'Làm mới thành công';
+
+  @override
+  String? refreshFailedText = 'Làm mới thất bại';
+
+  @override
+  String? refreshingText = 'Đang làm mới…';
 }

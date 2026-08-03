@@ -278,7 +278,7 @@ class _BuilderFooterState extends LoadIndicatorState<BuilderFooter> {
   }
 
   @override
-  Future readyToLoad() {
+  Future<void> readyToLoad() {
     if (widget.readyLoading != null) {
       return widget.readyLoading!();
     }
@@ -286,7 +286,7 @@ class _BuilderFooterState extends LoadIndicatorState<BuilderFooter> {
   }
 
   @override
-  Future endLoading() {
+  Future<void> endLoading() {
     if (widget.endLoading != null) {
       return widget.endLoading!();
     }

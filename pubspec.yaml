@@ -2,7 +2,7 @@ name: smart_scroll
 description: >-
   A Flutter widget for pull-to-refresh and infinite scroll pagination.
   Supports custom indicators and horizontal/vertical scrolling.
-version: 1.0.4
+version: 1.0.5
 homepage: https://github.com/QuangNH0606/smart_scroll
 repository: https://github.com/QuangNH0606/smart_scroll
 issue_tracker: https://github.com/QuangNH0606/smart_scroll/issues

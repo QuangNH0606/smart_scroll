@@ -132,7 +132,7 @@ class CustomFooter extends LoadIndicator {
 
   final OffsetCallBack? onOffsetChange;
 
-  final ModeChangeCallBack? onModeChange;
+  final ModeChangeCallBack<LoadStatus>? onModeChange;
 
   final VoidFutureCallBack? readyLoading;
 
@@ -162,7 +162,7 @@ class _CustomFooterState extends LoadIndicatorState<CustomFooter> {
   }
 
   @override
-  Future readyToLoad() {
+  Future<void> readyToLoad() {
     if (widget.readyLoading != null) {
       return widget.readyLoading!();
     }
@@ -170,7 +170,7 @@ class _CustomFooterState extends LoadIndicatorState<CustomFooter> {
   }
 
   @override
-  Future endLoading() {
+  Future<void> endLoading() {
     if (widget.endLoading != null) {
       return widget.endLoading!();
     }

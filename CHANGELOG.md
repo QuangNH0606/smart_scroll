@@ -5,6 +5,26 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.0.5]
+
+### Added
+- Optional `refreshTimeout` and `loadTimeout` safeguards.
+- Vietnamese refresh and loading strings.
+
+### Fixed
+- Prevented disposed refresh controllers from nulling indicator state while an
+  outgoing widget can still render its final frame.
+- Guarded delayed controller operations after disposal and made disposal
+  idempotent.
+- Safely rebound replacement controllers and refreshed timeout configuration
+  when a `SmartScroll` widget updates.
+- Preserved custom spring configuration on every platform.
+
+### Improved
+- Strengthened status and callback typing across indicators.
+- Reduced imperceptible Cupertino indicator rebuilds while preserving endpoint
+  states.
+
 ## [1.0.4]
 
 ### Fixed
